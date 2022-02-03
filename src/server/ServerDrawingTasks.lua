@@ -4,6 +4,57 @@ local Config = require(Common.Config)
 local LineInfo = require(Common.LineInfo)
 local MetaBoard
 
+local function resizePart(part, normal, delta)
+	local axis = Vector3.FromNormalId(normal)
+	part.Size = part.Size + Vector3.new(math.abs(axis.X), math.abs(axis.Y), math.abs(axis.Z)) * delta
+	part.CFrame = part.CFrame * CFrame.new(axis * (delta/2))
+end
+
+local function faceAlignParts(part1, part2)
+	local normalA = part1.CFrame:VectorToWorldSpace(Vector3.FromNormalId(Enum.NormalId.Left))
+	local normalB = part2.CFrame:VectorToWorldSpace(Vector3.FromNormalId(Enum.NormalId.Right))
+	local cross = part1.CFrame:VectorToWorldSpace(Vector3.FromNormalId(Enum.NormalId.Front))
+
+	local extendPointA, extendPointB
+
+	if normalA:Dot(normalB) > 0 then
+		extendPointA = part1.CFrame * Vector3.new(-part1.Size.X / 2, 0, 0)
+		extendPointB = part2.CFrame * Vector3.new(part2.Size.X / 2, 0, 0)
+	elseif (normalA:Cross(normalB):Dot(cross)) > 0 then
+		extendPointA = part1.CFrame * Vector3.new(-part1.Size.X / 2, part1.Size.Y / 2, 0)
+		extendPointB = part2.CFrame * Vector3.new(part2.Size.X / 2, part2.Size.Y / 2, 0)
+	else
+		extendPointA = part1.CFrame * Vector3.new(-part1.Size.X / 2, -part1.Size.Y / 2, 0)
+		extendPointB = part2.CFrame * Vector3.new(part2.Size.X / 2, -part2.Size.Y / 2, 0)
+	end
+
+	local startSep = extendPointB - extendPointA
+
+	-- Find the closest distance between the rays (extendPointA, dirA) and (extendPointB, dirB):
+	-- See: http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment
+	local a, b, c, d, e = normalA:Dot(normalA), normalA:Dot(normalB), normalB:Dot(normalB), normalA:Dot(startSep), normalB:Dot(startSep)
+	local denom = a*c - b*b
+
+	-- Is this a degenerate case?
+	if math.abs(denom) < 0.001 then
+		-- Parts are parallel, extend faceA to faceB
+		local lenA = (extendPointA - extendPointB):Dot(normalB)
+		if normalA:Dot(normalB) > 0 then
+			lenA = -lenA
+		end
+		resizePart(part1, Enum.NormalId.Left, lenA)
+		return
+	end
+
+	-- Get the distances to extend by
+	local lenA = -(b*e - c*d) / denom
+	local lenB = -(a*e - b*d) / denom
+
+	resizePart(part1, Enum.NormalId.Left, lenA)
+	resizePart(part2, Enum.NormalId.Right, lenB)
+end
+
+
 local ServerDrawingTasks = {}
 ServerDrawingTasks.__index = ServerDrawingTasks
 
@@ -59,6 +110,10 @@ function ServerDrawingTasks.FreeHand.Update(board, curve, pos)
 		local worldLine = MetaBoard.CreateWorldLine(Config.WorldBoard.LineType, board.Canvas, lineInfo, curve:GetAttribute("ZIndex"))
 		worldLine.Parent = curve
 		worldLine.Name = tostring(numPoints)
+
+		-- Resize with the previous line
+		local prevLine = curve:FindFirstChild(tostring(numPoints - 1))
+		faceAlignParts(prevLine, worldLine)
 	end
 
 	curve:SetAttribute("CurveStop", pos)

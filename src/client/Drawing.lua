@@ -1,4 +1,5 @@
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local LocalPlayer = game:GetService("Players").LocalPlayer
 local Common = game:GetService("ReplicatedStorage").MetaBoardCommon
 local Config = require(Common.Config)
@@ -20,7 +21,9 @@ local Drawing = {
 	---------------
 	MouseHeld = false,
 	-- pixel coordinates of mouse
-	MousePixelPos = nil,
+	MousePixelPos = Vector2.new(),
+	-- pen position
+	DrawPos = Vector2.new(),
 
 	-- the cursor that follows the mouse position
 	Cursor = nil,
@@ -125,6 +128,10 @@ function Drawing.Init(boardGui)
 		Drawing.MouseHeld = false
 	end)
 
+	RunService.RenderStepped:Connect(function(dt)
+		Drawing.DrawPos = Drawing.DrawPos:Lerp(Drawing.MousePixelPos, 0.5)
+	end)
+
 end
 
 function Drawing.OnBoardOpen(board)
@@ -221,12 +228,13 @@ function Drawing.ToolDown(x,y)
 	Buttons.SyncRedoButton(playerHistory)
 
 	Drawing.MousePixelPos = Vector2.new(x, y)
+	Drawing.DrawPos = Drawing.MousePixelPos
 end
 
 function Drawing.ToolMoved(x,y)
 	if Drawing.MouseHeld then
 
-		local newCanvasPos = CanvasState.GetScalePositionOnCanvas(Vector2.new(x, y))
+		local newCanvasPos = CanvasState.GetScalePositionOnCanvas(Drawing.DrawPos)
 		
 		-- Simple palm rejection
 		if UserInputService.TouchEnabled then
